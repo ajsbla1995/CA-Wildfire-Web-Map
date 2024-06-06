@@ -201,6 +201,7 @@ def index():
     firemap_html_interactive = firemap_html.replace('<body>' , '<body>' + landcover_legend_interactive + on_click_event + map_info_button_interactive)
 
 
+    # return firemap_html_interactive
     #return render_template('index.html', map_html=firemap_html_interactive, map_js='')
     return make_response(firemap_html_interactive)
 
@@ -212,7 +213,7 @@ if __name__ == '__main__':
     # Authorize + Initialize Google Earth Engine
     wildfire.auth_and_initialize_earth_engine(API_key_json, service_account)
 
-    app.run(debug=True, port = 8000)
+    app.run(debug=False, port = 8000)
     
 
 
