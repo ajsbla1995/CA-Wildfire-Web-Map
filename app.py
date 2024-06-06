@@ -25,7 +25,7 @@ from IPython.display import HTML
 import requests
 from bs4 import BeautifulSoup
 import create_wildfire_map as wildfire
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, make_response
 from flask_cors import CORS, cross_origin # Import CORS from flask_cors
 from dotenv import load_dotenv
 from flask_caching import Cache
@@ -201,7 +201,8 @@ def index():
     firemap_html_interactive = firemap_html.replace('<body>' , '<body>' + landcover_legend_interactive + on_click_event + map_info_button_interactive)
 
 
-    return firemap_html_interactive
+    #return render_template('index.html', map_html=firemap_html_interactive, map_js='')
+    return make_response(firemap_html_interactive)
 
         
     
