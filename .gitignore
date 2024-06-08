@@ -115,7 +115,7 @@ venv.bak/
 *.log
 
 # Ignore data directory if you have large datasets that shouldn't be versioned
-data/
+#data/
 
 # Ignore any specific files or directories related to your project
 # For example, if you have generated files or caches
