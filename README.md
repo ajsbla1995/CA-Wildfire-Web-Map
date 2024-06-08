@@ -41,12 +41,11 @@
     - Create and download a JSON private key file (.private-key.json) for the service account.
     - Create new file, named .env, in the project root
 
-    '''bash
+    ```bash
     touch .env
 
-    - Add the following variables to the .env file
 
-    '''text
+    ```text
     SERVICE_ACCOUNT = "your-service-account@your-project.iam.gserviceaccount.com"
     GOOGLE_EARTH_API_KEY = "path/to/google_earth_api.json"
 
