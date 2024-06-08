@@ -518,7 +518,7 @@ def get_closest_fds(df_firestations, fire_df, map):
         if station['IsActive'] == True:
             lat,lon = station['FD_Latitude'], station['FD_Longitude']
             (folium.CircleMarker([lat, lon], 
-                                  tooltip = f'{station['Station']} - {round(station['Distance (mi)'], 2)} miles from {station['Fire_Name']}',
+                                  tooltip = f"{station['Station']} - {round(station['Distance (mi)'], 2)} miles from {station['Fire_Name']}",
                                   color = '#a50f15', 
                                   radius = 1 
                                   )

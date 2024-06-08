@@ -41,12 +41,6 @@ import osmnx as ox
 import logging
 
 
-# Load environmental variables
-load_dotenv()
-
-
-
-#app = create_app()
 app = Flask(__name__)
 CORS(app) # enable CORS
 
@@ -54,18 +48,18 @@ CORS(app) # enable CORS
 # Get directory path and set working directory 
 calfire_geospatial_path = os.path.dirname(os.path.abspath(__file__)) 
 
-#wildfire.set_working_directory(calfire_geospatial_path)
+# Load environmental variables
+#load_dotenv(dotenv_path='/home/ajsbla/API_keys/.env') # Use for public deployment (directory where .env and GEE_API_key.json exist on pythonanywhere account)
+#load_dotenv()                                              # Use this for local development
 
-# Google Earth Engine Authentication
-API_key_json = wildfire.load_GEE_API_key()
-service_account = wildfire.load_GEE_service_account_credentials()
+# Load Google Earth Engine API key and service account credentials
+API_key_json = os.getenv('GOOGLE_EARTH_API_KEY') 
+service_account = os.getenv('SERVICE_ACCOUNT')
+
 
 # Configure Flask-Caching
 cache = Cache(config={'CACHE_TYPE': 'simple'})
 cache.init_app(app)
-
-
-
 
 
 # ------------------------------- FETCH LANDCOVER DATA FROM GEE --------------------------------------------
@@ -103,11 +97,8 @@ def fetch_weather():
     # Make the request to Google Earth Engine API and return the data as a json
     try:
         noaa_data = wildfire.get_current_weather_conditions(lat, lon)
-
-        # Print the JSON data for inspection
-        #print("Landcover Data:", landcover_data)
-        
         return jsonify(noaa_data)
+    
     except Exception as e:
         return jsonify({'error': str(e)})
     
@@ -213,9 +204,10 @@ if __name__ == '__main__':
     # Authorize + Initialize Google Earth Engine
     wildfire.auth_and_initialize_earth_engine(API_key_json, service_account)
 
-    app.run(debug=False, port = 8000)
+    app.run(debug=False, port = 8000) # pythonanywhere recommends to add app.run() only within __main__
 
-app   
+
+#app   
 
 
 
