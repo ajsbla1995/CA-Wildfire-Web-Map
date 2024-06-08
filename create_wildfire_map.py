@@ -30,16 +30,6 @@ import requests
 from bs4 import BeautifulSoup
 from flask import Flask, render_template, request
 from dotenv import load_dotenv
-
-
-
-import rasterio
-from rasterio.plot import show
-import rioxarray as rxr
-import earthpy as et
-import earthpy.spatial as es
-import earthpy.plot as ep
-import fiona
 import os
 from shapely import wkt
 from shapely.geometry import Polygon
@@ -47,20 +37,11 @@ from shapely.geometry import box
 from shapely.geometry import shape
 import matplotlib.pyplot as plt
 import contextily as ctx
-from osgeo import gdal 
 import numpy as np
 import glob
-import xarray
-import xrspatial
 import geojson
 import osmnx as ox
-import scipy
-from scipy.spatial import KDTree
-from datashader.transfer_functions import shade
-import richdem as rd                                    # calculate slope
-from rioxarray.merge import merge_arrays                # merge raster arrays together 
-from osgeo import gdal                                 # to merge rasters together
-import gemgis as gg
+
 
 
 
@@ -70,14 +51,14 @@ load_dotenv()
 # Change directory
 def get_path_to_project_directory():
     return os.getenv('CALFIRE_GEOSPATIAL_PATH')
+
 def set_working_directory(path):
     os.chdir(path)
 
 # Load border shapefiles and fire data
 def load_county_border_shapefile(calfire_geospatial_path):
-
     #CA_jurisdictions_path = os.path.join(calfire_geospatial_path, 'California Fire Stations', 'CA_firestations.geojson')
-    CA_counties_path = os.path.join(calfire_geospatial_path, 'CA_basemaps', 'CA_counties', 'CA_Counties_TIGER2016.shp')
+    CA_counties_path = os.path.join(calfire_geospatial_path, 'Data', 'County_and_Weather_Zones.shp', 'CA_Counties', 'CA_Counties_TIGER2016.shp')
     CA_counties = gpd.read_file(CA_counties_path).to_crs(epsg = 4269)
     return CA_counties
 
@@ -85,17 +66,17 @@ def load_state_border_shapefile(calfire_geospatial_path):
     return ox.geocode_to_gdf('California')
 
 def load_geocoded_firestations_df(calfire_geospatial_path):
-    geocoded_firestations_csv = os.path.join(calfire_geospatial_path, 'California Fire Stations', 'geocoded_CA_firestations_lonLat_final.csv')
+    geocoded_firestations_csv = os.path.join(calfire_geospatial_path,'Data', 'Firestations', 'geocoded_CA_firestations_lonLat_final.csv')
     stations =  pd.read_csv(geocoded_firestations_csv)
     return stations
 
-def load_historic_fire_perimeters(calfire_geospatial_path):
-    CA_perimeters_path = os.path.join(calfire_geospatial_path, 'CA_Wildfire_Perimeters', 'California_Fire_Perimeters_(all).shp')
-    CA_perimeters = gpd.read_file(CA_perimeters_path)
-    return CA_perimeters
+#def load_historic_fire_perimeters(calfire_geospatial_path):
+ #   CA_perimeters_path = os.path.join(calfire_geospatial_path, 'CA_Wildfire_Perimeters', 'California_Fire_Perimeters_(all).shp')
+  #  CA_perimeters = gpd.read_file(CA_perimeters_path)
+   # return CA_perimeters
 
 def load_CA_forecast_zones(calfire_geospatial_path):
-    nws_forecast_path = os.path.join(calfire_geospatial_path, 'CA_basemaps', 'nws_zones', 'z_19se23.shp')
+    nws_forecast_path = os.path.join(calfire_geospatial_path, 'Data', 'County_and_Weather_Zones.shp', 'nws_zones', 'z_19se23.shp')
     CA_forecast_zones = (gpd.read_file(nws_forecast_path)
                         .query("STATE == 'CA'")
                         .assign(S_zone = lambda x: x['STATE_ZONE'].apply(lambda zone: zone.replace('A', 'AZ')))
@@ -196,7 +177,7 @@ def scrape_calfire_geojson_to_df():
               .drop(columns = ['AdminUnitUrl', 'AgencyNames', 'UniqueId', 'Updated', 'StartedDateOnly','Final', 'Updated', 'ControlStatement', 'ExtinguishedDate' , 'Url', 'NotificationDesired'])
               .assign(Coordinates_Fire = (lambda x : '('+ x['Latitude'].astype(str)+ ','+ x['Longitude'].astype(str) + ')'))
              )
-              
+          
     
     else:
         print("Failed to fetch GeoJSON data. Status code:")

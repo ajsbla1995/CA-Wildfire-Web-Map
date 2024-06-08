@@ -11,7 +11,6 @@ from geopy.geocoders import Nominatim
 import requests
 import re
 import googlemaps
-import time
 from math import radians, sin, cos, sqrt, atan2       # Haversine Formula, closest points
 import networkx as nx
 import time
@@ -29,8 +28,6 @@ from flask import Flask, render_template, request, jsonify, make_response
 from flask_cors import CORS, cross_origin # Import CORS from flask_cors
 from dotenv import load_dotenv
 from flask_caching import Cache
-
-import fiona
 import os
 from shapely import wkt
 from shapely.geometry import Polygon
@@ -47,14 +44,17 @@ import logging
 # Load environmental variables
 load_dotenv()
 
+
+
 #app = create_app()
 app = Flask(__name__)
 CORS(app) # enable CORS
 
 
 # Get directory path and set working directory 
-calfire_geospatial_path = wildfire.get_path_to_project_directory()
-wildfire.set_working_directory(calfire_geospatial_path)
+calfire_geospatial_path = os.path.dirname(os.path.abspath(__file__)) 
+
+#wildfire.set_working_directory(calfire_geospatial_path)
 
 # Google Earth Engine Authentication
 API_key_json = wildfire.load_GEE_API_key()
@@ -121,7 +121,7 @@ def index():
     # Load CA shapefile data, historic perimeters, and firestations data
     CA_counties = wildfire.load_county_border_shapefile(calfire_geospatial_path)
     CA_state = wildfire.load_state_border_shapefile(calfire_geospatial_path)
-    historic_perimeters = wildfire.load_historic_fire_perimeters(calfire_geospatial_path)
+    #historic_perimeters = wildfire.load_historic_fire_perimeters(calfire_geospatial_path)
     stations = wildfire.load_geocoded_firestations_df(calfire_geospatial_path)
     nws_zones = wildfire.load_CA_forecast_zones(calfire_geospatial_path)
 
@@ -214,7 +214,8 @@ if __name__ == '__main__':
     wildfire.auth_and_initialize_earth_engine(API_key_json, service_account)
 
     app.run(debug=False, port = 8000)
-    
+
+app   
 
 
 
