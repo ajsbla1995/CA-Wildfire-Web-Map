@@ -55,8 +55,9 @@
     ```
 
 4. **Run application**
-   '''bash
+   ```bash
    python app.py
+   ```
 
     Open your web browser and navigate to http://localhost:8000. If this port=8000 is already in use, you can update code to port=5000 in app.py
 
