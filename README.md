@@ -34,20 +34,25 @@
 2. **Install dependencies**
    ```bash
    pip install -r requirements.txt
+   ```
 
 3. **Set-up environmental variables**
     - Make Google Earth Engine account
     - Register a service account 
     - Create and download a JSON private key file (.private-key.json) for the service account.
     - Create new file, named .env, in the project root
+    
 
     ```bash
     touch .env
+    ```
 
+    - Create service account and google earth api key environmental variables 
 
-    ```text
+    ```python
     SERVICE_ACCOUNT = "your-service-account@your-project.iam.gserviceaccount.com"
-    GOOGLE_EARTH_API_KEY = "path/to/google_earth_api.json"
+    GOOGLE_EARTH_API_KEY = "path/to/your/google_earth_api.json"
+    ```
 
 4. **Run application**
    '''bash
