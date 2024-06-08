@@ -120,3 +120,6 @@ venv.bak/
 # Ignore any specific files or directories related to your project
 # For example, if you have generated files or caches
 static/
+
+# API_keys
+API_keys/
