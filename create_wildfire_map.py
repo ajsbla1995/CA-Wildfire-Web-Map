@@ -83,8 +83,15 @@ def load_CA_forecast_zones(calfire_geospatial_path):
                 )
     return CA_forecast_zones
 
+def load_fire_weather_zones(calfire_geospatial_path):
+    fire_weather_zones_path = os.path.join(calfire_geospatial_path, 'Data', 'fire_weather_zones.shp', 'fz05mr24.shp')
+    fire_weather_zones = (gpd.read_file(fire_weather_zones_path)
+                        .query("STATE == 'CA'")
+                        .assign(S_zone = lambda x: x['STATE_ZONE'].apply(lambda zone: zone.replace('A', 'AZ')))
+                )
+    return fire_weather_zones
+
 def load_GEE_API_key():
-    #API_path = os.path.join(calfire_geospatial_path, 'google_earth_engine_authentication_key.json')
     return os.getenv('GOOGLE_EARTH_API_KEY')
 
 def load_GEE_service_account_credentials():
@@ -658,8 +665,16 @@ def get_sentinel_data():
     # Get Filter Bounds from geodataframe 
     def get_ee_geometry_bounds(state_shapefile):
         '''
-        Input a geodataframe, converts to geojson and selects geometry features. Returns the ee.Geometry object that can be used to determine
-        the filter bounds of the Earth Engine image.
+        Converts a state_shapefile (returned as a geodataframe) to a geojson. Selects the 'geometry' of this geojson, returns this
+        geometry as a ee.Geometry object.
+
+        Input
+        ------
+        state_shapefile : , converts to geojson and selects geometry features. 
+        
+        Return
+        ------
+        ee.Geometry object that can be used to determine the filter bounds of the Earth Engine image.
         '''
         geojson = state_shapefile.to_json()
         geo_dict = json.loads(geojson)
@@ -771,7 +786,36 @@ def modis_viz():
 # ---------------------------------------- NATIONAL WEATHER SERVICE DATA ----------------------
 
 
-def add_red_flag_warning(state, nws_zones, m):
+def add_red_flag_warning(state, fire_weather_zones, m):
+
+    '''
+    GET request to National Weather Service API for Special NWS warnings 'Fire Weather Watch' and 'Red Flag Warning'.
+
+    Inputs
+    ------
+    state (str) : For this project, state will be 'CA', this is used in the endpoint to query all warnings for CA
+    nws_zones (df) : Shapefile of National Weather Zones (NWS), the geocoded areas used by NWS to alert users for fire weather
+    m : the current folium map object
+
+    Returns
+    -------
+    Map object with added Red Flag Warning layer. 
+    
+    
+    '''
+    tooltip_width_css = """
+    <style>
+        .leaflet-tooltip {
+            max-width: 300px; /* Set the maximum width of the tooltip */
+            min-width: 200px; 
+            white-space: normal; /* Ensure the text wraps within the tooltip */
+        }
+    </style>
+    """
+     # Add the custom CSS to the map
+    m.get_root().html.add_child(folium.Element(tooltip_width_css))
+
+
     # Endpoint that contains the alerts for the specified state
     endpoint = f'https://api.weather.gov/alerts/active?area={state}'
     
@@ -817,7 +861,7 @@ def add_red_flag_warning(state, nws_zones, m):
     #red_flag_layer = folium.FeatureGroup(name='Areas Under Fire Watch / Red Flag Warning', control=True)
     
     # Filter forecast zones dataframe based on the geocodes
-    zones_df = pd.concat([nws_zones.query(f"S_zone == '{geocode}'") for geocode in geocodes])
+    zones_df = pd.concat([fire_weather_zones.query(f"S_zone == '{geocode}'") for geocode in geocodes])
     
         
     # Add the geometries to the map
@@ -825,14 +869,14 @@ def add_red_flag_warning(state, nws_zones, m):
         geometry = row['geometry']
         folium.GeoJson(
             data=geometry.__geo_interface__,
-            overlay = False,
-            name=f"Fire Watch / Red Flag Warning - {row['SHORTNAME']}",
-            #tooltip=f"Red Flag / Fire Watch Warning- {row['SHORTNAME']}",
+            overlay = True,
+            name=f"<b>Fire Watch / Red Flag Warning</b> - {row['NAME']}",
+            tooltip=f"<b>Red Flag / Fire Watch Warning</b> - {row['NAME']}",
             style_function= lambda feature: {
-                                            'fillColor': '#67000d',  # Fill color of the polygon
-                                            'color': '#67000d',      # Outline color of the polygon
-                                            'weight': 0.2,          # Outline weight
-                                            'fillOpacity': 0.45, 
+                                            'fillColor': '#fe9929',#'#67000d',  # Fill color of the polygon
+                                            'color': '#fe9929',#'#800026',      # Outline color of the polygon
+                                            'weight': .01,          # Outline weight
+                                            'fillOpacity': .75, 
                                         }                          
                                     ).add_to(red_flag_layer)
             
@@ -894,8 +938,8 @@ def add_excessive_heat_warning(state, nws_zones, m):
         folium.GeoJson(
             data=geometry.__geo_interface__,
             overlay=False,
-            name=f"Excessive Heat Warning - {row['SHORTNAME']}",
-            # tooltip=f"Excessive Heat Warning - {row['SHORTNAME']}",
+            name=f"<b>Excessive Heat Warning</b> - {row['SHORTNAME']}",
+            tooltip=f"<b>Excessive Heat Warning</b> - {row['SHORTNAME']}",
             style_function=lambda feature: {
                 'fillColor': 'salmon',  # Fill color of the polygon
                 'color': '#a50f15',     # Outline color of the polygon

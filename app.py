@@ -49,11 +49,15 @@ CORS(app) # enable CORS
 calfire_geospatial_path = os.path.dirname(os.path.abspath(__file__)) 
 
 # Load environmental variables
-#load_dotenv(dotenv_path='/home/ajsbla/API_keys/.env') # Use for public deployment (directory where .env and GEE_API_key.json exist on pythonanywhere account)
-#load_dotenv()                                              # Use this for local development
+load_dotenv(dotenv_path='/home/ajsbla/API_keys/.env')                   # Use for public deployment (directory where .env and GEE_API_key.json exist on pythonanywhere account)                                                           
+#load_dotenv(os.path.join(calfire_geospatial_path, '.env'))              # Use this for local development  
+
+
 
 # Load Google Earth Engine API key and service account credentials
-API_key_json = os.getenv('GOOGLE_EARTH_API_KEY') 
+
+#API_key_json = '/Users/andresabala/Downloads/Data Analysis Projects/CalFireProject/GeoSpatial/Wildfire_Webmap/Data/API_keys/google_earth_engine_authentication_key.json' # Use for local server
+API_key_json = os.getenv('GOOGLE_EARTH_API_KEY')  #Use for public deployment
 service_account = os.getenv('SERVICE_ACCOUNT')
 
 
@@ -115,6 +119,7 @@ def index():
     #historic_perimeters = wildfire.load_historic_fire_perimeters(calfire_geospatial_path)
     stations = wildfire.load_geocoded_firestations_df(calfire_geospatial_path)
     nws_zones = wildfire.load_CA_forecast_zones(calfire_geospatial_path)
+    fire_weather_zones = wildfire.load_fire_weather_zones(calfire_geospatial_path)
 
     # Initialize the firemap 
     m = wildfire.create_folium_map(CA_counties, CA_state)
@@ -134,7 +139,7 @@ def index():
 
     # Add NOAA weather data
 
-    wildfire.add_red_flag_warning('CA', nws_zones, m)
+    wildfire.add_red_flag_warning('CA', fire_weather_zones, m)
     wildfire.add_excessive_heat_warning('CA', nws_zones, m )
 
 
@@ -207,7 +212,7 @@ if __name__ == '__main__':
     app.run(debug=False, port = 8000) # pythonanywhere recommends to add app.run() only within __main__
 
 
-#app   
+app   
 
 
 
