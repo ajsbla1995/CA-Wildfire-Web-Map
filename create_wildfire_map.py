@@ -967,37 +967,52 @@ def get_current_weather_conditions(lat, lon):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
     }
-
     response = requests.get(endpoint, headers=headers)
-    if response.status_code == 200:
-        data = response.json()
-        forecast_url = data['properties']['forecast']
-        #return forecast_url
-    else:
-        return f"Error: Unable to retrieve forecast URL. Status code {response.status_code}"
+    if response.status_code != 200:
+        return f"Error: Unable to retrieve forecast. Status code {response.status_code}, Response: {response.text}"
 
-    # Step 2: Get the current weather observation from the forecast URL
+    data = response.json()
+    forecast_url = data['properties']['forecast']
+    gridpoint_url = data['properties']['forecastGridData'] # To retreive Relative Humidity, as of June 20th,2024 the documentation and endpoints changed, specifically for relative humidity.
+    
+    # Get the current local weather from forecast url
     response = requests.get(forecast_url, headers=headers)
-    if response.status_code == 200:
-         data = response.json()
-         temperature = data['properties']['periods'][0]['temperature']
-         temperature_unit = data['properties']['periods'][0]['temperatureUnit']
-         humidity = data['properties']['periods'][0]['relativeHumidity']['value']
-         wind_speed = data['properties']['periods'][0]['windSpeed']
-         wind_direction = data['properties']['periods'][0]['windDirection']
-         forecast = data['properties']['periods'][0]['detailedForecast']
-         day_of_week = data['properties']['periods'][0]['name']
-         date = data['properties']['periods'][0]['startTime']
-         date_converted = datetime.fromisoformat(date[:-6]).strftime('%m/%d/%y')
+    if response.status_code != 200:
+        return f"Current weather data for location is unavailable ({response.status_code})"
+    
+    data = response.json()
+    try:
+        # Ensure data is in expected format
+        period = data['properties']['periods'][0] # Selects the forecast for the current period
+        temperature = period['temperature']
+        temperature_unit = period['temperatureUnit']
+        humidity = period.get('relativeHumidity', {}).get('value', 'N/A')
+        wind_speed = period['windSpeed']
+        wind_direction = period['windDirection']
+        forecast = period['detailedForecast']
+        day_of_week = period['name']
+        date = period['startTime']
+        date_converted = datetime.fromisoformat(date[:-6]).strftime('%m/%d/%y')
         
-         return f"({date_converted}): {forecast} The humidity is {humidity}%"
-         #return temperature, temperature_unit
-    else:
-        return f"Unable to retrieve current weather data for location ({response.status_code})"
+        #return f"({date_converted}): {forecast} The relative humidity is {humidity}%"
+    except KeyError as e:
+        return f"Error parsing weather data: {e}"
+    
+    # Get the relative humidity from the gridpoint url
+    response = requests.get(gridpoint_url, headers=headers)
+    if response.status_code != 200:
+        return f"Unable to retrieve gridpoint data for location ({response.status_code})"
+    
+    gridpoint_data = response.json()
+    try:
+        humidity = gridpoint_data['properties']['relativeHumidity']['values'][0]['value']
+    except KeyError as e:
+        humidity = 'currently not able to be retrieved.'
+
+    return f"({date_converted}): {forecast} The relative humidity is {humidity}%"
 
 
-
-
+#f"({date_converted}): {forecast} The humidity is {humidity}%"
 
 # ------------------------------ CUSTOM JAVASCRIPT CODE TO INJECT ON CLICK EVENTS, MAP INFO BUTTON, LANDCOVER LEGEND -----------------------
 
