@@ -1012,7 +1012,7 @@ def get_current_weather_conditions(lat, lon):
     return f"({date_converted}): {forecast} The relative humidity is {humidity}%"
 
 
-#f"({date_converted}): {forecast} The humidity is {humidity}%"
+
 
 # ------------------------------ CUSTOM JAVASCRIPT CODE TO INJECT ON CLICK EVENTS, MAP INFO BUTTON, LANDCOVER LEGEND -----------------------
 

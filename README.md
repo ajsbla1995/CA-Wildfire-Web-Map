@@ -1,6 +1,13 @@
 # CA Wildfire Tracker
 
 ## Overview
+- Welcome to my CA Wildfire Tracker web map! This wildfire tracker pulls up-to-date spatial data on active California wildfires from www.CALfire.com via the API for developers. Going beyond simply giving coordinates of active fires, I wanted to provide the user with more context such as: What are the current weather forecasts for the wildfire area of interest? What landcover types are present within the active region of the fire? Can satellite imagery be updated in near-real-time to show wildfire perimeters and the extent of potential damage? 
+
+- The end goal of this project was to create an interactive web map in Python that allowed the user to be able to select any point on the map and retrieve weather and landcover data for that point. Weather data were collected from the National Weather Service's API Points endpoint, which gives a detailed forecast for latitude, longitude coordinate pair. Landcover data were queried from Google Earth Engine via the Python API. To include interactivity, my Python code has Javascript injected when necessary.
+
+- Satellite Imagery was queried from Google Earth Engine, and specifically uses Sentinel-2 imagery. The temporal resolution of Sentinel-2 images is ~5 days (number of days to orbit the same location), which allows us to track large fires that span weeks. 
+
+- Lastly, to handle all the API requests and data required in this web map, a Flask web framework was used. 
 
 ## Features
 
@@ -28,8 +35,8 @@
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/yourusername/your-repo.git
-   cd your-repo
+   git clone https://github.com/ajsbla1995/CA-Wildfire-Web-Map.git
+   cd CA-Wildfire-Web-Map
 
 2. **Install dependencies**
    ```bash

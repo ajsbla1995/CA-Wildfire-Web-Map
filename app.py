@@ -55,7 +55,7 @@ load_dotenv(dotenv_path='/home/ajsbla/API_keys/.env')                   # Use fo
 
 
 # Load Google Earth Engine API key and service account credentials
-#API_key_json = "/Users/andresabala/Downloads/Data Analysis Projects/CalFireProject/GeoSpatial/Wildfire_Webmap/Data/API_keys/google_earth_engine_authentication_key.json" # Use for local server
+
 API_key_json = os.getenv('GOOGLE_EARTH_API_KEY')  #Use for public deployment
 service_account = os.getenv('SERVICE_ACCOUNT')
 
