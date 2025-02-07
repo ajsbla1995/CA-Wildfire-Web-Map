@@ -11,7 +11,8 @@
 
 ## Features
 
-- **Real-time Wildfire Data**: Displays active wildfires in California.
+- **Real-time Wildfire Data**: Displays active wildfires in California. 
+- **Active and Inactive Wildfire Perimeters**: Shows updated fire perimeters to show progression and recovery of burned acreage
 - **Weather Information**: Fetches current weather conditions from NOAA.
 - **Land Cover Data**: Shows land cover information based on user clicks.
 - **Fire Stations**: Marks the locations of fire stations across California.

@@ -136,11 +136,14 @@ def create_folium_map(counties_shapefile, state_shapefile):
     return map
 
 def add_title_to_map(m):
+
+    # Get current year
+    current_year = datetime.now().year
     # Add Title
-    title_html = '''
+    title_html = f'''
     <div style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000; 
                 background-color: white; padding: 5px 10px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.5);">
-        <h3 style="margin: 0; font-size: 20px;"><b>2024 CA Wildfire Tracker within State Responsibility Area</b></h3>
+        <h3 style="margin: 0; font-size: 20px;"><b>{current_year} CA Wildfire Tracker within State Responsibility Area</b></h3>
     </div>
     '''
     title_element = Element(title_html)
@@ -191,13 +194,108 @@ def scrape_calfire_geojson_to_df():
 
     return df
 
+def compute_total_acres_for_current_yr(fire_df):
+    total_acres = fire_df['AcresBurned'].sum()
+    return total_acres.astype(int)
 
 
-# -------------------------- ADD CALFIRE FIRES TO MAP --------------------------
+
+#----------------------------------- ADD CURRENT PERIMS ---------------------------
+
+def retrieve_wildfire_perims_nifc():
+    ''' 
+    Retrieves active wildfire perimeters in California for the current year 
+    from the NIFC FIRIS API.
+    
+    Returns
+    -------
+    GeoDataFrame of active wildfire perimeters in California for the current year.
+    '''
+    
+    # Endpoint for All Fires in 2025
+    url_geojson = 'https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_YearToDate/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson' # All Perimeters for current year
+    #url_geojson = 'https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson' # Active Perimeters
+    
+    response = requests.get(url_geojson)
+    data = response.json()
+    gdf = (gpd
+           .read_file(response.text)
+           .rename (columns = {
+                        'poly_IncidentName': 'Incident Name',
+                        'attr_EstimatedCostToDate': 'Estimated Cost to Date',
+                        'attr_TotalIncidentPersonnel': 'Total Incident Personnel',
+                        'attr_EstimatedFinalCost': 'Estimated Final Cost',
+                        'attr_IncidentComplexityLevel': 'Incident Complexity Level',
+                        'attr_FireCause': 'Fire Cause',
+                        'attr_FireBehaviorGeneral': 'Fire Behavior (General)',
+                    })
+
+    )
+
+     # Filter the GeoDataFrame to include only perimeters in California
+    california_gdf = gdf[gdf['attr_POOState'] == 'US-CA']
+        
+    return california_gdf
+    
+    #return gdf 
 
 
-def add_fires_to_map(fire_df, map):
+
+def join_nifc_calfire_gdfs(nifc_gdf, calfire_df):
+    """
+    Perform a spatial join between CalFire (point-based) and NIFC (polygon-based) wildfire datasets. Needed to use
+    gpd.sjoin_nearest() to match the closest perimeters. 
+    
+    - nifc_gdf: GeoDataFrame with NIFC perimeters (polygons)
+    - calfire_df: DataFrame with CalFire fires (latitude & longitude)
+    
+    Returns:
+    - A merged GeoDataFrame with CalFire attributes linked to NIFC perimeters.
+    """
+    
+    # Convert CalFire DataFrame to a GeoDataFrame with Point geometries
+    calfire_gdf = gpd.GeoDataFrame(
+        calfire_df,
+        geometry=gpd.points_from_xy(calfire_df["Longitude"], calfire_df["Latitude"]),
+        crs="EPSG:4326"  # Ensure it's in WGS84 lat/lon
+    )
+    
+    # Ensure NIFC is in the same CRS
+    if nifc_gdf.crs is None:
+        nifc_gdf.set_crs("EPSG:4326", inplace=True)  # Set CRS if missing
+    elif nifc_gdf.crs != "EPSG:4326":
+        nifc_gdf = nifc_gdf.to_crs("EPSG:4326")  # Convert to WGS84 if needed
+
+    joined_gdf = gpd.sjoin_nearest(nifc_gdf, calfire_gdf, how="inner")
+
+
+    return joined_gdf
+
+
+# -------------------------- ADD CALFIRE FIRES LAT/LONG AND PERIMETERS TO MAP --------------------------
+
+
+def add_fires_and_perimeters_to_map(fire_df, map):
    
+    """
+    Creates several feature groups of active and inactive fire markers (using Lat/Lon) and Geometries of wildfire 
+    perimeters. Imports active and inactive perimeters feature group functions to show these perimeters 
+    in the Grouped Control Layer. Uses css styling for the tooltip
+
+    ARGS
+    -----
+    fire_df : spatially joined NIFC and Calfire geojsons
+    active_perimeters_feature_group: feature group containing geometric bounds of active fires
+    inactive_perimeters_feature_group: feature group containing geometric bounds of inactive fires
+    map: map object to which we add the fires
+
+    RETURNS
+    -------
+    map with added fires
+    
+    """
+
+
     # CSS added to control tooltip sizing
     tooltip_width_css = """
     <style>
@@ -211,172 +309,161 @@ def add_fires_to_map(fire_df, map):
      # Add the custom CSS to the map
     map.get_root().html.add_child(folium.Element(tooltip_width_css))
 
-
+    # --------- MAP LAYER CONTROLS ------------
     active_layer = folium.FeatureGroup(name='All Active Fires', control= True, show = True)
     small_fires_active = folium.FeatureGroup(name='Active Small Fires (<100 acres)', control= True, show = False)
     medium_fires_active = folium.FeatureGroup(name='Active Medium Fires (100 - 1,000 acres)', control= True, show = False)
     large_fires_active = folium.FeatureGroup(name = 'Active Large Fires (1,000 - 10,000 acres)', control = True, show = False)
     mega_fires_active = folium.FeatureGroup(name='Active Mega Fires (10,000+ acres)', control= True, show = False)
     inactive_layer = folium.FeatureGroup(name='All Contained Fires', control = True, show = False)
-    large_fires_inactive = folium.FeatureGroup(name = ' Contained Large Fires (1000+ acres)', control = True, show = False)
-                                  
+    large_fires_inactive = folium.FeatureGroup(name = 'Contained Large Fires (1000+ acres)', control = True, show = False)
+    #active_fire_perimeters = active_perimeters_feature_group
+    #inactive_fire_perimeters = inactive_perimeters_feature_group
+    
+
+
     for index, fire in fire_df.iterrows():
-        lat = fire['Latitude']
-        lon = fire['Longitude']
-        fire_name = fire['Name']
-        start_date_month_day = (datetime
-                      .strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ')
-                      .strftime('%B %d')
-                     )
-        start_date_hour = (datetime
-                      .strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ')
-                      .strftime('%H:%M')
-                     )
         
+        #-------- VARIABLES TO ADD TO TOOLTIP ------
+        fire_name = fire['Name']
+        start_date_month_day = datetime.strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ').strftime('%B %d')
+        start_date_hour = datetime.strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ').strftime('%H:%M')
+
         admin_unit = fire['AdminUnit']
         county = fire['County']
         acres = fire['AcresBurned']
-        # Check if acres is NaN
+        est_cost = fire['Estimated Cost to Date']
+        final_cost = fire['Estimated Final Cost']
+        personnel = fire['Total Incident Personnel']
+        complex_level = fire['Incident Complexity Level']
+        fire_cause = fire['Fire Cause']
+        behavior = fire['Fire Behavior (General)']
+        lat = fire['Latitude']
+        lon = fire['Longitude']
+        percent_contained = fire['PercentContained']
+
+    
+       
+       # ------------- HANDLE NaN ROWS --------------
+
+         # NaN Acres / Percent Contained / Containment Status
+        acres_burned = 'Not Yet Updated' if pd.isna(acres) else round(acres, 2)
+        percent_contained = fire['PercentContained']
+        containment_status = 'Not Yet Updated' if pd.isna(percent_contained) else f"{percent_contained}% contained"
+        #formatted_est_cost = f"${final_cost:,.2f}" if pd.isna(est_cost) else f"${est_cost:,.2f}"
+        
+
+       # Handle NaN Cost
+        if pd.isna(est_cost) and pd.isna(final_cost):
+            formatted_est_cost = "Not Yet Updated"
+        else:
+            formatted_est_cost = f"${final_cost:,.2f}" if pd.notna(final_cost) else f"${est_cost:,.2f}"
+        # Handle NaN Acres
         if pd.isna(acres):
             acres_burned = 'Not Yet Updated'
         else:
             acres_burned = round(acres, 2)
-
-        percent_contained = fire['PercentContained']
-        # Check if percent_contained is NaN
+        # Handle NaN % Contained
         if pd.isna(percent_contained):
             containment_status = 'Not Yet Updated'
         else:
             containment_status = f"{percent_contained}% contained"
-    
+        # Handle NaN Personnel Assigned
+        if pd.isna(personnel):
+            personnel = 'Not Yet Updated'
+        else:
+            personnel 
+
+        # ---------- TOOLTIP FORMATTING -----------------
+
+        def create_fire_marker(fire, lat, lon, layer, color):
+            """Creates and adds a fire marker to the specified layer."""
+            folium.Marker(
+                [lat, lon],
+                tooltip=(f"""
+                          <div class="fire-tooltip">
+                              <strong>{fire_name.upper()}</strong> <br>
+                              Discovered on {start_date_month_day} at {start_date_hour} <br>
+                              <strong>County</strong>: {county} <br>
+                              <strong>Complex Level</strong>: {complex_level} <br>
+                              <strong>Fire Behavior</strong>: {behavior} <br>
+                              <strong>Cause of Fire</strong>: {fire_cause} <br>
+                              <strong>Acres</strong>: {acres_burned} <br>
+                              <strong>Status</strong>: {containment_status} <br>
+                              <strong>Administrative Unit</strong>: {admin_unit} <br>
+                              <strong>Personnel Assigned</strong>: {personnel} <br>
+                              <strong>Estimated Cost to Date</strong>: {formatted_est_cost} <br>
+                          </div>
+                          """),
+                icon=folium.Icon(icon='fire', color=color, icon_color='white')
+            ).add_to(layer)
+
+        def create_fire_polygon(fire, layer):
+            """Creates and adds a fire perimeter polygon to the specified layer."""
+            folium.GeoJson(
+                fire['geometry'],
+                tooltip=f"""
+                    <div class="fire-tooltip">
+                        <strong>{fire_name.upper()}</strong> <br>
+                    </div>
+                """,
+                style_function=lambda feature: {
+                    'fillColor': '#FFA500',
+                    'fillOpacity': 0.5,
+                    'weight': 3,
+                    'color': 'red',
+                    'dashArray': '5,5'
+                },
+            ).add_to(layer)
+            
+        
 
         # Adds markers for each active fire, if acres > 300, adds markers to 'large_fires_active' Feature Group
         if (fire['IsActive'] == True):
             color = 'red'
             containment = 'still active'
-            folium.Marker([lat, lon], 
-                      #popup=fire_name, 
-                      tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                      icon = folium.Icon(icon = 'fire', 
-                                       color =color, 
-                                       icon_color= 'white')).add_to(active_layer)
+            create_fire_marker(fire, lat, lon, active_layer, color)
+            create_fire_polygon(fire, active_layer)
+            
             if fire['AcresBurned'] < 100:
                 color = 'red'
                 containment = 'still active'
-                folium.Marker([lat, lon], 
-                          #popup=fire_name, 
-                          tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                          icon = folium.Icon(icon = 'fire',
-                                        color =color, 
-                                        icon_color= 'white')).add_to(small_fires_active)
+                create_fire_marker(fire, lat, lon, small_fires_active, color)
+                create_fire_polygon(fire, small_fires_active)
+                
+                
             elif (fire['AcresBurned'] > 100 and fire['AcresBurned']<1000):
                 color = 'red'
                 containment = 'still active'
-                folium.Marker([lat, lon], 
-                          #popup=fire_name, 
-                          tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                          icon = folium.Icon(icon = 'fire',
-                                        color =color, 
-                                        icon_color= 'white')).add_to(medium_fires_active)
+                create_fire_marker(fire, lat, lon, medium_fires_active, color)
+                create_fire_polygon(fire, medium_fires_active),
+                
+
             elif (fire['AcresBurned'] > 1000 and fire['AcresBurned']<10000):
                 color = 'red'
                 containment = 'still active'
-                folium.Marker([lat, lon], 
-                        #popup=fire_name, 
-                        tooltip = f"""
-                        <div class="fire-tooltip">
-                            <strong>{fire_name.upper()}</strong> <br>
-                            Discovered on {start_date_month_day} at {start_date_hour} <br>
-                            <strong>County</strong>: {county} <br>
-                            <strong>Acres</strong>: {acres_burned} <br>
-                            <strong>Status</strong>: {containment_status} <br>
-                            <strong>Administrative Unit</strong>: {admin_unit}
-                        </div>
-                        """,
-                        icon = folium.Icon(icon = 'fire',
-                                        color =color, 
-                                        icon_color= 'white')).add_to(large_fires_active)
+                create_fire_marker(fire, lat, lon, large_fires_active, color)
+                create_fire_polygon(fire, large_fires_active)
+                
+
             elif fire['AcresBurned'] > 10000:
                 color = 'red'
                 containment = 'still active'
-                folium.Marker([lat, lon], 
-                          #popup=fire_name, 
-                          tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                          icon = folium.Icon(icon = 'fire',
-                                        color =color, 
-                                        icon_color= 'white')).add_to(mega_fires_active)
+                create_fire_marker(fire, lat, lon, mega_fires_active, color)
+                create_fire_polygon(fire, mega_fires_active)
+                
         else:
                 color = 'lightgray'
                 containment = 'not active'
-                folium.Marker([lat, lon], 
-                          #popup=fire_name, 
-                          tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                          icon = folium.Icon(icon = 'fire', 
-                                             color =color, 
-                                             icon_color= 'white')).add_to(inactive_layer)  
+                create_fire_marker(fire, lat, lon, inactive_layer, color)
+                create_fire_polygon(fire, inactive_layer)
+                  
                 if  fire['AcresBurned'] > 1000: 
+                    create_fire_marker(fire, lat, lon, large_fires_inactive, color)
+                    create_fire_polygon(fire, large_fires_inactive)
                     color = 'lightgray' 
                     containment = 'not active'
-                    folium.Marker([lat, lon], 
-                              #popup=fire_name, 
-                              tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                              icon = folium.Icon(icon = 'fire', 
-                                                 color =color, 
-                                                 icon_color= 'white')).add_to(large_fires_inactive) 
+
             
     active_layer.add_to(map)
     small_fires_active.add_to(map)
@@ -385,6 +472,9 @@ def add_fires_to_map(fire_df, map):
     mega_fires_active.add_to(map)
     inactive_layer.add_to(map)
     large_fires_inactive.add_to(map)
+    #active_fire_perimeters.add_to(map)
+    #inactive_fire_perimeters.add_to(map)
+    
 
     current_date = datetime.now().strftime('%m-%d-%Y')
     
@@ -400,8 +490,233 @@ def add_fires_to_map(fire_df, map):
  
     
     return map
+
+
+# --------------------------- ADD METRICS DATA --------------------------------------
+def compute_total_acres_for_current_yr(fire_df):
+    total_acres = fire_df['AcresBurned'].sum()
+    return total_acres.astype(int)
+
+def compute_number_of_fires(fire_df):
+    active_fires = fire_df[fire_df['IsActive']== True]
+    number_active_fires = active_fires['Name'].nunique()
+    return number_active_fires
+
+def compute_total_damage(fire_df):
+    total_damage = fire_df['Estimated Cost to Date'].sum()
+    return total_damage
+
+import base64
+def image_to_base64(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode('utf-8')
     
-   
+
+
+
+
+def dep_add_metrics_panel(m, total_active_fires, total_acres, total_cost, acres_burned_icon, total_damage_icon, total_active_fires_icon):
+    """Adds a metrics panel to the Folium map displaying total fires, acres burned, and cost in a single row."""
+    
+    # Get current year
+    current_year = datetime.now().year
+
+    # Define the metrics panel HTML with images
+    html = f"""
+    <div id="metrics-container" style="
+        position: absolute;
+        bottom: 20px; 
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(128, 128, 128, 0.45); /* Light grey background with slight opacity */
+        color: white;
+        padding: 10px 15px;
+        border-radius: 10px;
+        font-family: Arial, sans-serif;
+        z-index: 1000;
+        display: flex; 
+        flex-direction: row; /* Align items in a single row */
+        gap: 10px;
+        align-items: center;
+    ">
+        <!-- Title -->
+        <h2 style="
+            margin: 0 0 5px; 
+            font-size: 18px; 
+            font-weight: bold; 
+            text-align: center; 
+            color: white;
+        ">
+            {current_year} CA Fire Statistics
+        </h2>
+
+        <!-- Total Acres Burned Metric -->
+        <div class="metric" style="
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px;
+        ">
+            <img src="data:image/png;base64,{acres_burned_icon}" width="100" height="100">
+            <div style="
+                display: flex; 
+                flex-direction: column; 
+                text-align: left; 
+                min-width: 120px;
+            ">
+                <h4 style="margin: 0; font-size: 14px; color: white;">Total Acres Burned</h4>
+                <p style="font-size: 18px; font-weight: bold; color: white;">{total_acres:,}</p>
+            </div>
+        </div>
+
+        <!-- Total Damages Metric -->
+        <div class="metric" style="
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px;
+        ">
+            <img src="data:image/png;base64,{total_damage_icon}" width="100" height="70">
+            <div style="
+                display: flex; 
+                flex-direction: column; 
+                text-align: left; 
+                min-width: 120px;
+            ">
+                <h4 style="margin: 0; font-size: 14px; color: white;">Total Damage Estimates</h4>
+                <p style="font-size: 18px; font-weight: bold; color: white;">${total_cost:,}</p>
+            </div>
+
+            
+         <!-- Total Number of Active Fires -->
+        <div class="metric" style="
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px;
+        ">
+            <img src="data:image/png;base64,{total_active_fires_icon}" width="100" height="100">
+            <div style="
+                display: flex; 
+                flex-direction: column; 
+                text-align: left; 
+                min-width: 120px;
+            ">
+                <h4 style="margin: 0; font-size: 14px; color: white;">Number of Active Fires</h4>
+                <p style="font-size: 18px; font-weight: bold; color: white;">${total_active_fires:,}</p>
+            </div>
+
+
+        </div>
+    </div>
+    """
+
+    # Wrap HTML in an element
+    metrics_element = Element(html)
+    m.get_root().html.add_child(metrics_element)  # Correct way to add custom elements
+    return m
+
+
+def add_metrics_panel(m, total_active_fires, total_acres, total_cost, acres_burned_icon, total_damage_icon, total_active_fires_icon):
+    """Adds a metrics panel to the Folium map displaying total fires, acres burned, and cost in a single row."""
+    
+    # Get current year
+    current_year = datetime.now().year
+
+    # Define the metrics panel HTML with images
+    html = f"""
+    <div id="metrics-container" style="
+        position: absolute;
+        bottom: 20px; 
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(128, 128, 128, 0.45); /* Light grey background with slight opacity */
+        color: white;
+        padding: 10px 15px;
+        border-radius: 10px;
+        font-family: Arial, sans-serif;
+        z-index: 1000;
+        display: flex; 
+        flex-direction: row; /* Align items in a single row */
+        gap: 10px;
+        align-items: center;
+    ">
+        <!-- Title -->
+        <h2 style="
+            margin: 0 0 5px; 
+            font-size: 18px; 
+            font-weight: bold; 
+            text-align: center; 
+            color: white;
+            width: 100%;
+        ">
+            {current_year} CA FIRE STATISTICS 
+        </h2>
+
+        <!-- Total Acres Burned Metric -->
+        <div class="metric" style="
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px;
+        ">
+            <img src="data:image/png;base64,{acres_burned_icon}" width="100" height="100">
+            <div style="
+                display: flex; 
+                flex-direction: column; 
+                text-align: left; 
+                min-width: 120px;
+            ">
+                <h4 style="margin: 0; font-size: 14px; color: white;">Total Acres Burned</h4>
+                <p style="font-size: 18px; font-weight: bold; color: white;">{total_acres:,}</p>
+            </div>
+        </div>
+
+        <!-- Total Damages Metric -->
+        <div class="metric" style="
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px;
+        ">
+            <img src="data:image/png;base64,{total_damage_icon}" width="100" height="70">
+            <div style="
+                display: flex; 
+                flex-direction: column; 
+                text-align: left; 
+                min-width: 120px;
+            ">
+                <h4 style="margin: 0; font-size: 14px; color: white;">Total Damage Estimates</h4>
+                <p style="font-size: 18px; font-weight: bold; color: white;">${total_cost:,}</p>
+            </div>
+        </div>
+
+        <!-- Total Number of Active Fires -->
+        <div class="metric" style="
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px;
+        ">
+            <img src="data:image/png;base64,{total_active_fires_icon}" width="60" height="60">
+            <div style="
+                display: flex; 
+                flex-direction: column; 
+                text-align: left; 
+                min-width: 120px;
+            ">
+                <h4 style="margin: 0; font-size: 14px; color: white;">Number of Active Fires</h4>
+                <p style="font-size: 18px; font-weight: bold; color: white;">{total_active_fires:,}</p>
+            </div>
+        </div>
+    </div>
+    """
+      # Wrap HTML in an element
+    metrics_element = Element(html)
+    m.get_root().html.add_child(metrics_element)  # Correct way to add custom elements
+    return m
+
+
 
 
 # --------------------------------- ADD FIRE DEPTs ---------------------------------- 
@@ -538,21 +853,6 @@ def get_closest_fds(df_firestations, fire_df, map):
     fd_layer.add_to(map)
     return map
 
-
-    
-# ----------------------------------- ADD HISTORIC PERIMS --------------------------
-
-def add_historic_perims(map, historic_perims):
-    def style_function_perims(feature):
-        return {
-            'fillColor': '#525252',  # Fill color of the county
-            'color': '#cb181d',       # Outline color of the county
-            'weight': .5,           # Outline weight
-            'fillOpacity': .05     # Fill opacity
-        }
-    folium.GeoJson(historic_perims, name = 'Historic Wildfire Perimeters', style_function = style_function_perims, control = True).add_to(map)
-    
-    return map
 
 
 
