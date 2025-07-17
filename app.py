@@ -62,7 +62,7 @@ CORS(app) # enable CORS
 calfire_geospatial_path = os.path.dirname(os.path.abspath(__file__)) 
 
 # Load environmental variables
-load_dotenv(dotenv_path='/home/ajsbla/API_keys/.env')                   # Use for public deployment (directory where .env and GEE_API_key.json exist on pythonanywhere account)                                                           
+#load_dotenv(dotenv_path='/home/ajsbla/API_keys/.env')                   # Use for public deployment (directory where .env and GEE_API_key.json exist on pythonanywhere account)                                                           
 #load_dotenv(os.path.join(calfire_geospatial_path, '.env'))              # Use this for local development  
 
 
@@ -167,7 +167,6 @@ def index():
     total_active_fires = wildfire.compute_number_of_fires(calfire_df)
     total_cost = wildfire.compute_total_damage(nifc_perims_gdf)
 
-    #API_key_json = os.path.join(calfire_geospatial_path, 'Data', 'API_keys', 'google_earth_engine_authentication_key.json') # for local
     acres_burned_image_path = os.path.join(calfire_geospatial_path, 'Data', 'Images', 'forest_fire_emblem Background Removed.png')
     acres_burned_image = wildfire.image_to_base64(acres_burned_image_path)
     total_cost_image_path = os.path.join(calfire_geospatial_path, 'Data', 'Images', 'house_on_fire Background Removed.png')

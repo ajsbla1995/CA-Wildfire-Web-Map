@@ -41,7 +41,7 @@ import numpy as np
 import glob
 import geojson
 import osmnx as ox
-from branca.element import Element
+
 
 
 
@@ -177,15 +177,20 @@ async def fetch_calfire_geojson():
 def process_geojson_to_df(geojson_data):
     # Extract the properties directly and convert to a DataFrame
     df = pd.json_normalize(geojson_data['features'])
+   
+
     
     # Drop unnecessary columns
-    columns_to_drop = ['properties.AdminUnitUrl', 'properties.AgencyNames', 'properties.UniqueId', 
+    columns_to_drop = ['properties.AdminUnitUrl', 'properties.AgencyNames', 
                        'properties.Updated', 'properties.StartedDateOnly', 'properties.Final', 
                        'properties.Updated', 'properties.ControlStatement', 'properties.ExtinguishedDate', 
                        'properties.Url', 'properties.NotificationDesired']
     
     # Flatten the columns in the 'properties' namespace
     df = df.drop(columns=columns_to_drop)
+
+     # Change the Unique IDs to be upper case
+    #df['UniqueId'] = df['UniqueId'].str.upper()
     
     # Create a new 'Coordinates_Fire' column in a vectorized way
     df['Coordinates_Fire'] = '(' + df['properties.Latitude'].astype(str) + ',' + df['properties.Longitude'].astype(str) + ')'
@@ -210,6 +215,9 @@ async def fetch_wildfire_perims_nifc():
     # Endpoint for All Fires in 2025
     url_geojson = 'https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_YearToDate/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson' # All Perimeters for current year
     #url_geojson = 'https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson' # Active Perimeters
+    
+
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'   
     }
@@ -228,6 +236,7 @@ async def fetch_wildfire_perims_nifc():
 def process_perimeters_geojson_to_gdf(perimeters_geojson):
     gdf = (gpd.GeoDataFrame
            .from_features(perimeters_geojson['features'])
+            .assign(poly_IncidentName = lambda x: x['poly_IncidentName'].str.upper() + ' FIRE')
            .rename (columns = {
                         'poly_IncidentName': 'Incident Name',
                         'attr_EstimatedCostToDate': 'Estimated Cost to Date',
@@ -237,8 +246,10 @@ def process_perimeters_geojson_to_gdf(perimeters_geojson):
                         'attr_FireCause': 'Fire Cause',
                         'attr_FireBehaviorGeneral': 'Fire Behavior (General)',
                     })
+            .assign(poly_IRWINID=lambda x: x['poly_IRWINID'].str.strip('{}'))   
 
     )
+
 
      # Filter the GeoDataFrame to include only perimeters in California
     california_gdf = gdf[gdf['attr_POOState'] == 'US-CA']
@@ -254,7 +265,7 @@ def join_nifc_calfire_gdfs(nifc_gdf, calfire_df):
     - calfire_df: DataFrame with CalFire fires (latitude & longitude)
     
     Returns:
-    - A merged GeoDataFrame with CalFire attributes linked to NIFC perimeters.
+    - A merged GeoDataFrame with CalFire attributes linked to NIFC perimeters and indexed by calfire data.
     """
     
     # Convert CalFire DataFrame to a GeoDataFrame with Point geometries
@@ -272,6 +283,64 @@ def join_nifc_calfire_gdfs(nifc_gdf, calfire_df):
 
     joined_gdf = gpd.sjoin_nearest(nifc_gdf, calfire_gdf, how="inner")
 
+
+    return joined_gdf
+
+
+
+def left_join_nifc_calfire_gdfs(nifc_gdf, calfire_df):
+    """
+    Spatially joins CalFire points to nearest NIFC polygons. Retains CalFire rows and point geometry, 
+    but also includes NIFC polygon geometry in a separate column. 
+    
+    Returns:
+    - GeoDataFrame with CalFire point geometry, plus a new 'nifc_geometry' column for matched polygon.
+    """
+
+    # Convert CalFire DataFrame to GeoDataFrame
+    calfire_gdf = gpd.GeoDataFrame(
+        calfire_df,
+        geometry=gpd.points_from_xy(calfire_df["Longitude"], calfire_df["Latitude"]),
+        crs="EPSG:4326"
+    )
+
+    # Format Incident Names in calfire gdf to match NIFC Names
+    calfire_gdf['UniqueId']= calfire_gdf['UniqueId'].str.upper() # Change the Unique IDs to be upper case
+    calfire_gdf['Name']= calfire_gdf['Name'] = (
+                                calfire_gdf['Name']
+                                .str.upper()
+                                #.str.replace(r'\s+FIRE$', '', regex=True)
+                            )
+    # Ensure NIFC is also in WGS84
+    if nifc_gdf.crs is None:
+        nifc_gdf.set_crs("EPSG:4326", inplace=True)
+    elif nifc_gdf.crs != "EPSG:4326":
+        nifc_gdf = nifc_gdf.to_crs("EPSG:4326")
+    
+    # Store NIFC polygon geometry under a different column name before joining
+    #nifc_gdf = nifc_gdf.copy()
+    nifc_gdf["nifc_geometry"] = nifc_gdf.geometry
+
+
+
+    # Perform spatial join (left join to keep all CalFire points)
+    '''
+    When joining calfire_gdf and nifc_gdf, the geometries are getting wonky. When left joining nifc on calfire,
+    the geometries are assigned to calfire. Therefore, the fire perimeters are only represented by Point geometries -
+    NOT the polygons I need. Have to find out how to reassign the geometries to the nifc_geometry column
+    '''
+    # ---- SPATIAL JOIN ------
+    #joined_gdf = gpd.sjoin_nearest(calfire_gdf, nifc_gdf, how="left")
+
+    # ----- MERGE ON UNIQUE IRWIN IDs --------
+    #joined_gdf = calfire_gdf.merge(nifc_gdf, how = 'left', left_on = 'UniqueId', right_on = 'poly_IRWINID')
+
+    # ------ MERGE ON NAMES ------------
+    joined_gdf = calfire_gdf.merge(nifc_gdf, how = 'left', left_on = 'Name', right_on = 'Incident Name' )
+    # If nifc_gdf is a GeoDataFrame and you want to preserve its geometries:
+    #joined_gdf = gpd.GeoDataFrame(joined_gdf, geometry='nifc_geometry', crs=calfire_gdf.crs)  
+    # Set NIFC polygons as the active geometry
+    joined_gdf = joined_gdf.set_geometry('nifc_geometry')
 
     return joined_gdf
 
@@ -553,7 +622,7 @@ def add_fires_and_perimeters_to_map(fire_df, m):
         percent_contained = fire['PercentContained']
 
     
-       
+    
        # ------------- HANDLE NaN ROWS --------------
 
          # NaN Acres / Percent Contained / Containment Status
@@ -701,6 +770,504 @@ def add_fires_and_perimeters_to_map(fire_df, m):
     
     return m
 
+
+
+def add_fires_from_calfire_and_perimeters_from_nifc_to_map(joined_gdf, m):
+   
+    """
+    This is a debug function. When usign the traditional function to add markers, the datasets between nifc and calfire
+    were not updated similarly. Therefore, there are no "active fires" according to the joined dataframes, which is obv
+    incorrect. Here, I try to add the markers based on the calfire_df so they populate correctly. Next, if there are any
+    perimeters and data from nifc add this, otherwise only use calfire_df.
+
+
+    Creates several feature groups of active and inactive fire markers (using Lat/Lon) and Geometries of wildfire 
+    perimeters. Imports active and inactive perimeters feature group functions to show these perimeters 
+    in the Grouped Control Layer. Uses css styling for the tooltip
+
+    ARGS
+    -----
+    fire_df : spatially joined NIFC and Calfire geojsons
+    active_perimeters_feature_group: feature group containing geometric bounds of active fires
+    inactive_perimeters_feature_group: feature group containing geometric bounds of inactive fires
+    map: map object to which we add the fires
+
+    RETURNS
+    -------
+    map with added fires
+    
+    """
+
+
+    # CSS added to control tooltip sizing
+    tooltip_width_css = """
+    <style>
+        .fire-tooltip {
+            max-width: 300px; /* Set the maximum width of the tooltip */
+            min-width: 200px; 
+            white-space: normal; /* Ensure the text wraps within the tooltip */
+        }
+    </style>
+    """
+     # Add the custom CSS to the map
+    m.get_root().html.add_child(folium.Element(tooltip_width_css))
+
+    # --------- MAP LAYER CONTROLS ------------
+    active_layer = folium.FeatureGroup(name='All Active Fires', control= True, show = True)
+    small_fires_active = folium.FeatureGroup(name='Active Small Fires (<100 acres)', control= True, show = False)
+    medium_fires_active = folium.FeatureGroup(name='Active Medium Fires (100 - 1,000 acres)', control= True, show = False)
+    large_fires_active = folium.FeatureGroup(name = 'Active Large Fires (1,000 - 10,000 acres)', control = True, show = False)
+    mega_fires_active = folium.FeatureGroup(name='Active Mega Fires (10,000+ acres)', control= True, show = False)
+    inactive_layer = folium.FeatureGroup(name='All Contained Fires', control = True, show = False)
+    large_fires_inactive = folium.FeatureGroup(name = 'Contained Large Fires (1000+ acres)', control = True, show = False)
+    #active_fire_perimeters = active_perimeters_feature_group
+    #inactive_fire_perimeters = inactive_perimeters_feature_group
+    
+
+    for index, fire in joined_gdf.iterrows():
+        
+        #-------- VARIABLES TO ADD TO TOOLTIP ------
+    
+        #------CALFIRE COLUMNS --------
+        fire_name = fire['Name']
+        start_date_month_day = datetime.strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ').strftime('%B %d')
+        start_date_hour = datetime.strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ').strftime('%H:%M')
+        admin_unit = fire['AdminUnit']
+        county = fire['County']
+        acres = fire['AcresBurned']
+        lat = fire['Latitude']
+        lon = fire['Longitude']
+        percent_contained = fire['PercentContained']
+
+
+         #-------- NIFC COLUMNS ------
+        # Only want NIFC data if there's a match (i.e., NIFC fields aren't NaN)
+        est_cost = fire.get('Estimated Cost to Date') if pd.notna(fire.get('Estimated Cost to Date')) else None
+        final_cost = fire.get('Estimated Final Cost') if pd.notna(fire.get('Estimated Final Cost')) else None
+        personnel = fire.get('Total Incident Personnel') if pd.notna(fire.get('Total Incident Personnel')) else None
+        complex_level = fire.get('Incident Complexity Level') if pd.notna(fire.get('Incident Complexity Level')) else None
+        fire_cause = fire.get('Fire Cause') if pd.notna(fire.get('Fire Cause')) else None
+        behavior = fire.get('Fire Behavior (General)') if pd.notna(fire.get('Fire Behavior (General)')) else None
+
+
+
+
+   
+
+       
+
+
+
+    
+    
+       # ------------- HANDLE NaN ROWS --------------
+
+         # NaN Acres / Percent Contained / Containment Status
+        acres_burned = 'Not Yet Updated' if pd.isna(acres) else round(acres, 2)
+        percent_contained = fire['PercentContained']
+        containment_status = 'Not Yet Updated' if pd.isna(percent_contained) else f"{percent_contained}% contained"
+        #formatted_est_cost = f"${final_cost:,.2f}" if pd.isna(est_cost) else f"${est_cost:,.2f}"
+        
+
+       # Handle NaN Cost
+        if pd.isna(est_cost) and pd.isna(final_cost):
+            formatted_est_cost = "Not Yet Updated"
+        else:
+            formatted_est_cost = f"${final_cost:,.2f}" if pd.notna(final_cost) else f"${est_cost:,.2f}"
+        # Handle NaN Acres
+        if pd.isna(acres):
+            acres_burned = 'Not Yet Updated'
+        else:
+            acres_burned = round(acres, 2)
+        # Handle NaN % Contained
+        if pd.isna(percent_contained):
+            containment_status = 'Not Yet Updated'
+        else:
+            containment_status = f"{percent_contained}% contained"
+        # Handle NaN Personnel Assigned
+        if pd.isna(personnel):
+            personnel = 'Not Yet Updated'
+        else:
+            personnel 
+
+        # ---------- TOOLTIP FORMATTING -----------------
+
+        def create_fire_marker(fire, lat, lon, layer, color):
+            """Creates and adds a fire marker to the specified layer."""
+            folium.Marker(
+                [lat, lon],
+                tooltip=(f"""
+                          <div class="fire-tooltip">
+                              <strong>{fire_name.upper()}</strong> <br>
+                              Discovered on {start_date_month_day} at {start_date_hour} <br>
+                              <strong>County</strong>: {county} <br>
+                              <strong>Complex Level</strong>: {complex_level} <br>
+                              <strong>Fire Behavior</strong>: {behavior} <br>
+                              <strong>Cause of Fire</strong>: {fire_cause} <br>
+                              <strong>Acres</strong>: {acres_burned} <br>
+                              <strong>Status</strong>: {containment_status} <br>
+                              <strong>Administrative Unit</strong>: {admin_unit} <br>
+                              <strong>Personnel Assigned</strong>: {personnel} <br>
+                              <strong>Estimated Cost to Date</strong>: {formatted_est_cost} <br>
+                          </div>
+                          """),
+                icon=folium.Icon(icon='fire', color=color, icon_color='white')
+            ).add_to(layer)
+
+
+
+
+        def create_fire_polygon(fire, layer):
+            """Creates and adds a fire perimeter polygon to the specified layer, only if geometry is present. Uses
+            geometries from NIFC table."""
+            #geometry = fire.get('nifc_geometry')
+            if fire['nifc_geometry'] and not fire['nifc_geometry'].is_empty:
+                folium.GeoJson(
+                    fire['nifc_geometry'],
+                    tooltip=f"""
+                        <div class="fire-tooltip">
+                            <strong>{fire.get('Name', 'Unknown').upper()}</strong> <br>
+                        </div>
+                    """,
+                    style_function=lambda feature: {
+                        'fillColor': '#FFA500',
+                        'fillOpacity': 0.5,
+                        'weight': 3,
+                        'color': 'red',
+                        'dashArray': '5,5'
+                    },
+                ).add_to(layer)
+              
+                
+            
+
+        # Adds markers for each active fire, if acres > 300, adds markers to 'large_fires_active' Feature Group
+        if (fire['IsActive'] == True):
+            color = 'red'
+            containment = 'still active'
+            create_fire_marker(fire, lat, lon, active_layer, color)
+            create_fire_polygon(fire, active_layer)
+            
+            if fire['AcresBurned'] < 100:
+                color = 'red'
+                containment = 'still active'
+                create_fire_marker(fire, lat, lon, small_fires_active, color)
+                create_fire_polygon(fire, small_fires_active)
+                
+                
+            elif (fire['AcresBurned'] > 100 and fire['AcresBurned']<1000):
+                color = 'red'
+                containment = 'still active'
+                create_fire_marker(fire, lat, lon, medium_fires_active, color)
+                create_fire_polygon(fire, medium_fires_active),
+                
+
+            elif (fire['AcresBurned'] > 1000 and fire['AcresBurned']<10000):
+                color = 'red'
+                containment = 'still active'
+                create_fire_marker(fire, lat, lon, large_fires_active, color)
+                create_fire_polygon(fire, large_fires_active)
+                
+
+            elif fire['AcresBurned'] > 10000:
+                color = 'red'
+                containment = 'still active'
+                create_fire_marker(fire, lat, lon, mega_fires_active, color)
+                create_fire_polygon(fire, mega_fires_active)
+                
+        else:
+                color = 'lightgray'
+                containment = 'not active'
+                create_fire_marker(fire, lat, lon, inactive_layer, color)
+                create_fire_polygon(fire, inactive_layer)
+                  
+                if  fire['AcresBurned'] > 1000: 
+                    create_fire_marker(fire, lat, lon, large_fires_inactive, color)
+                    create_fire_polygon(fire, large_fires_inactive)
+                    color = 'lightgray' 
+                    containment = 'not active'
+
+            
+    active_layer.add_to(m)
+    small_fires_active.add_to(m)
+    medium_fires_active.add_to(m)
+    large_fires_active.add_to(m)
+    mega_fires_active.add_to(m)
+    inactive_layer.add_to(m)
+    large_fires_inactive.add_to(m)
+    #active_fire_perimeters.add_to(map)
+    #inactive_fire_perimeters.add_to(map)
+    
+
+    current_date = datetime.now().strftime('%m-%d-%Y')
+    
+    grouped_layer_control = GroupedLayerControl(
+                                            groups={
+                                                f'<b>CURRENTLY ACTIVE FIRES AS OF {current_date}</b>': [active_layer, small_fires_active, medium_fires_active, large_fires_active, mega_fires_active], 
+                                                '<br>INACTIVE FIRES</br>': [inactive_layer, large_fires_inactive]
+                                            },
+                                            collapsed=False,
+                                            exclusive_groups= False,
+                                            position = 'bottomleft'
+                                            ).add_to(m)
+ 
+    
+    return m
+
+
+
+
+
+
+
+
+def v2_add_fires_and_perimeters_to_map(joined_df, calfire_df, m):
+   
+    """
+    Creates several feature groups of active and inactive fire markers (using Lat/Lon) and Geometries of wildfire 
+    perimeters. Imports active and inactive perimeters feature group functions to show these perimeters 
+    in the Grouped Control Layer. Uses css styling for the tooltip
+
+    ARGS
+    -----
+    fire_df : spatially joined NIFC and Calfire geojsons
+    active_perimeters_feature_group: feature group containing geometric bounds of active fires
+    inactive_perimeters_feature_group: feature group containing geometric bounds of inactive fires
+    map: map object to which we add the fires
+
+    RETURNS
+    -------
+    map with added fires
+    
+    """
+
+
+    # CSS added to control tooltip sizing
+    tooltip_width_css = """
+    <style>
+        .fire-tooltip {
+            max-width: 300px; /* Set the maximum width of the tooltip */
+            min-width: 200px; 
+            white-space: normal; /* Ensure the text wraps within the tooltip */
+        }
+    </style>
+    """
+     # Add the custom CSS to the map
+    m.get_root().html.add_child(folium.Element(tooltip_width_css))
+
+    # --------- MAP LAYER CONTROLS ------------
+    active_layer = folium.FeatureGroup(name='All Active Fires', control= True, show = True)
+    small_fires_active = folium.FeatureGroup(name='Active Small Fires (<100 acres)', control= True, show = False)
+    medium_fires_active = folium.FeatureGroup(name='Active Medium Fires (100 - 1,000 acres)', control= True, show = False)
+    large_fires_active = folium.FeatureGroup(name = 'Active Large Fires (1,000 - 10,000 acres)', control = True, show = False)
+    mega_fires_active = folium.FeatureGroup(name='Active Mega Fires (10,000+ acres)', control= True, show = False)
+    inactive_layer = folium.FeatureGroup(name='All Contained Fires', control = True, show = False)
+    large_fires_inactive = folium.FeatureGroup(name = 'Contained Large Fires (1000+ acres)', control = True, show = False)
+    #active_fire_perimeters = active_perimeters_feature_group
+    #inactive_fire_perimeters = inactive_perimeters_feature_group
+    
+    for index, matching_fire in joined_df.iterrows():
+        def create_fire_polygon(joined_df, layer):
+            """Creates and adds a fire perimeter polygon to the specified layer IF there is a matching NIFC geometry available."""
+            folium.GeoJson(
+                matching_fire['geometry'],
+                tooltip=f"""
+                    <div class="fire-tooltip">
+                        <strong>{fire_name.upper()}</strong> <br>
+                    </div>
+                """,
+                style_function=lambda feature: {
+                    'fillColor': '#FFA500',
+                    'fillOpacity': 0.5,
+                    'weight': 3,
+                    'color': 'red',
+                    'dashArray': '5,5'
+                },
+            ).add_to(layer)
+
+    for index, fire in calfire_df.iterrows():
+        
+        #-------- VARIABLES TO ADD TO TOOLTIP ------
+        fire_name = fire['Name']
+        start_date_month_day = datetime.strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ').strftime('%B %d')
+        start_date_hour = datetime.strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ').strftime('%H:%M')
+        admin_unit = fire['AdminUnit']
+        county = fire['County']
+        acres = fire['AcresBurned']
+        lat = fire['Latitude']
+        lon = fire['Longitude']
+
+        '''est_cost = fire['Estimated Cost to Date']
+        final_cost = fire['Estimated Final Cost']
+        personnel = fire['Total Incident Personnel']
+
+        complex_level = fire['Incident Complexity Level']
+        fire_cause = fire['Fire Cause']
+        behavior = fire['Fire Behavior (General)']
+        '''
+
+        percent_contained = fire['PercentContained']
+
+    
+    
+       # ------------- HANDLE NaN ROWS --------------
+
+         # NaN Acres / Percent Contained / Containment Status
+        acres_burned = 'Not Yet Updated' if pd.isna(acres) else round(acres, 2)
+        percent_contained = fire['PercentContained']
+        containment_status = 'Not Yet Updated' if pd.isna(percent_contained) else f"{percent_contained}% contained"
+        #formatted_est_cost = f"${final_cost:,.2f}" if pd.isna(est_cost) else f"${est_cost:,.2f}"
+        
+
+        '''       # Handle NaN Cost
+        if pd.isna(est_cost) and pd.isna(final_cost):
+            formatted_est_cost = "Not Yet Updated"
+        else:
+            formatted_est_cost = f"${final_cost:,.2f}" if pd.notna(final_cost) else f"${est_cost:,.2f}"
+        # Handle NaN Acres
+        if pd.isna(acres):
+            acres_burned = 'Not Yet Updated'
+        else:
+            acres_burned = round(acres, 2)
+        # Handle NaN % Contained
+        if pd.isna(percent_contained):
+            containment_status = 'Not Yet Updated'
+        else:
+            containment_status = f"{percent_contained}% contained"
+        # Handle NaN Personnel Assigned
+        if pd.isna(personnel):
+            personnel = 'Not Yet Updated'
+        else:
+            personnel '''
+
+        # ---------- TOOLTIP FORMATTING -----------------
+
+        '''def create_fire_marker(calfire, lat, lon, layer, color):
+            """Creates and adds a fire marker to the specified layer."""
+            folium.Marker(
+                [lat, lon],
+                tooltip=(f"""
+                          <div class="fire-tooltip">
+                              <strong>{fire_name.upper()}</strong> <br>
+                              Discovered on {start_date_month_day} at {start_date_hour} <br>
+                              <strong>County</strong>: {county} <br>
+                              <strong>Acres</strong>: {acres_burned} <br>
+                              <strong>Status</strong>: {containment_status} <br>
+                              <strong>Administrative Unit</strong>: {admin_unit} <br>
+                            
+                          </div>
+                          """),
+                icon=folium.Icon(icon='fire', color=color, icon_color='white')
+            ).add_to(layer)'''
+
+        def create_fire_marker(fire, lat, lon, layer, color):
+            fire_name = fire['Name']
+            start_date = datetime.strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ')
+            start_date_str = start_date.strftime('%B %d at %H:%M')
+            admin_unit = fire['AdminUnit']
+            county = fire['County']
+            acres = 'Not Yet Updated' if pd.isna(fire['AcresBurned']) else round(fire['AcresBurned'], 2)
+            containment = 'Not Yet Updated' if pd.isna(fire['PercentContained']) else f"{fire['PercentContained']}% contained"
+
+            return folium.Marker(
+                location=[lat, lon],
+                tooltip=f"""
+                    <div class="fire-tooltip">
+                        <strong>{fire_name.upper()}</strong><br>
+                        Discovered on {start_date_str}<br>
+                        <strong>County:</strong> {county}<br>
+                        <strong>Acres:</strong> {acres}<br>
+                        <strong>Status:</strong> {containment}<br>
+                        <strong>Admin Unit:</strong> {admin_unit}<br>
+                    </div>
+                """,
+                icon=folium.Icon(icon='fire', color=color, icon_color='white') ).add_to(layer)
+            
+
+                        # Add this to the tooltip if the information is available (a matching nifc perimeter)
+                            # <strong>Complex Level</strong>: {complex_level} <br>
+                             # <strong>Fire Behavior</strong>: {behavior} <br>
+                             # <strong>Cause of Fire</strong>: {fire_cause} <br>
+                             #  <strong>Personnel Assigned</strong>: {personnel} <br>
+                             # <strong>Estimated Cost to Date</strong>: {formatted_est_cost} <br>
+
+
+    
+            
+        
+
+        # Adds markers for each active fire, if acres > 300, adds markers to 'large_fires_active' Feature Group
+        if (fire['IsActive'] != False):
+            color = 'red'
+            containment = 'still active'
+            create_fire_marker(fire, lat, lon, active_layer, color)
+            create_fire_polygon(matching_fire, active_layer)
+            
+            if fire['AcresBurned'] < 100:
+                color = 'red'
+                containment = 'still active'
+                create_fire_marker(fire, lat, lon, small_fires_active, color)
+                create_fire_polygon(matching_fire, small_fires_active)
+                
+                
+            elif (fire['AcresBurned'] > 100 and fire['AcresBurned']<1000):
+                color = 'red'
+                containment = 'still active'
+                create_fire_marker(fire, lat, lon, medium_fires_active, color)
+                create_fire_polygon(matching_fire, medium_fires_active),
+                
+
+            elif (fire['AcresBurned'] > 1000 and fire['AcresBurned']<10000):
+                color = 'red'
+                containment = 'still active'
+                create_fire_marker(fire, lat, lon, large_fires_active, color)
+                create_fire_polygon(matching_fire, large_fires_active)
+                
+
+            elif fire['AcresBurned'] > 10000:
+                color = 'red'
+                containment = 'still active'
+                create_fire_marker(fire, lat, lon, mega_fires_active, color)
+                create_fire_polygon(matching_fire, mega_fires_active)
+                
+        else:
+                color = 'lightgray'
+                containment = 'not active'
+                create_fire_marker(fire, lat, lon, inactive_layer, color)
+                create_fire_polygon(matching_fire, inactive_layer)
+                  
+                if  fire['AcresBurned'] > 1000: 
+                    create_fire_marker(fire, lat, lon, large_fires_inactive, color)
+                    create_fire_polygon(matching_fire, large_fires_inactive)
+                    color = 'lightgray' 
+                    containment = 'not active'
+
+            
+    active_layer.add_to(m)
+    small_fires_active.add_to(m)
+    medium_fires_active.add_to(m)
+    large_fires_active.add_to(m)
+    mega_fires_active.add_to(m)
+    inactive_layer.add_to(m)
+    large_fires_inactive.add_to(m)
+    #active_fire_perimeters.add_to(map)
+    #inactive_fire_perimeters.add_to(map)
+    
+
+    current_date = datetime.now().strftime('%m-%d-%Y')
+    
+    grouped_layer_control = GroupedLayerControl(
+                                            groups={
+                                                f'<b>CURRENTLY ACTIVE FIRES AS OF {current_date}</b>': [active_layer, small_fires_active, medium_fires_active, large_fires_active, mega_fires_active], 
+                                                '<br>INACTIVE FIRES</br>': [inactive_layer, large_fires_inactive]
+                                            },
+                                            collapsed=False,
+                                            exclusive_groups= False,
+                                            position = 'bottomleft'
+                                            ).add_to(m)
+ 
+    
+    return m
 
 # --------------------------- ADD METRICS DATA --------------------------------------
 def compute_total_acres_for_current_yr(fire_df):

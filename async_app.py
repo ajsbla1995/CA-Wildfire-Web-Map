@@ -147,11 +147,45 @@ async def main():
     calfire_df = wildfire.process_geojson_to_df(calfire_geojson)
     perimeters_gdf = wildfire.process_perimeters_geojson_to_gdf(perimeters_geojson)
     nifc_calfire_gdf_joined = wildfire.join_nifc_calfire_gdfs(perimeters_gdf, calfire_df)
+    calfire_nifc_gdf_left_joined = wildfire.left_join_nifc_calfire_gdfs(perimeters_gdf, calfire_df)
+    
+    #print(calfire_df.columns)
+    #print(calfire_nifc_gdf_left_joined)
+    #print(list(calfire_nifc_gdf_left_joined.columns))
+    #print(calfire_nifc_gdf_left_joined['nifc_geometry'])
+    print(f"CALFIRE columns: {list(calfire_df.columns)}")
+    print(f"NIFC columns: {list(perimeters_gdf.columns)}")
+    print(calfire_df['Name'])
+    print(perimeters_gdf[['poly_IRWINID','Incident Name']])
+    #print(perimeters_gdf['poly_IRWINID']'])
+    
+    print(f"CALFIRE_NIFC columns: {list(calfire_nifc_gdf_left_joined.columns)}")
+    
+
+
+    print(f"GEOMETRY COLUMN NAME : {calfire_nifc_gdf_left_joined.geometry.name}")
+    print(f"GEOMETRY TYPE : {calfire_nifc_gdf_left_joined.geom_type}")
+
+
+    # Having issues with nifc_calfire_gdf_joined not reporting all active fires. Calfire and NIFC not 
+        # updating at same rate. Show fire location markers from calfire_df, then add information from NIFC?
+
+
+
+  
+
+
 
 
    
     # Add Fire Markers and Perimeters
-    wildfire.add_fires_and_perimeters_to_map(nifc_calfire_gdf_joined, m)
+    #wildfire.add_fires_and_perimeters_to_map(nifc_calfire_gdf_joined, m)
+
+    # Debug Fire markers
+    wildfire.add_fires_from_calfire_and_perimeters_from_nifc_to_map(calfire_nifc_gdf_left_joined, m)  # uses left joined calfire/nifc datasets 
+    #wildfire.v2_add_fires_and_perimeters_to_map(nifc_calfire_gdf_joined, calfire_df, m)
+
+
 
    
        # Make Metrics Panel and Add to Map
