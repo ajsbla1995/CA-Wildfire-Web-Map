@@ -18,7 +18,7 @@ ipython==8.12.3
 Jinja2==3.1.5
 matplotlib==3.8.2
 networkx==3.3
-numpy==2.2.2
+numpy>=1.21,<2.0
 osmnx==2.0.1
 pandas==2.2.3
 PyCRS==1.0.2
