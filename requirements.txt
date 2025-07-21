@@ -8,7 +8,7 @@ Flask==3.1.0
 Flask_Caching==2.3.0
 Flask_Cors==4.0.0
 folium==0.17.0
-GDAL==3.8.2
+GDAL==3.6.2
 geemap==0.32.0
 geojson==3.1.0
 geopandas==0.14.1
