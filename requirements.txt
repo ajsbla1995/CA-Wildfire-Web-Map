@@ -26,3 +26,4 @@ python-dotenv==1.0.1
 Requests==2.32.3
 Shapely==2.0.7
 setuptools
+gunicorn
