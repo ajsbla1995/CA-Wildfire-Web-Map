@@ -70,7 +70,7 @@ calfire_geospatial_path = os.path.dirname(os.path.abspath(__file__))
 #service_account = os.getenv('SERVICE_ACCOUNT')
 
 # RENDER DEPLOYMENT
-API_key_json = os.getenv('GOOGLE_EARTH_API_KEY')  # Use for public deployment with render.com
+API_key_json = '/etc/secrets/google_earth_engine_authentication_key.json'  # Use for public deployment with render.com
 service_account = os.getenv('SERVICE_ACCOUNT')
 
 
