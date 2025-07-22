@@ -56,14 +56,21 @@ calfire_geospatial_path = os.path.dirname(os.path.abspath(__file__))
 
 # Load environmental variables
 #load_dotenv(dotenv_path='/home/ajsbla/API_keys/.env')                   # Use for public deployment (directory where .env and GEE_API_key.json exist on pythonanywhere account)                                                           
-load_dotenv(os.path.join(calfire_geospatial_path, '.env'))              # Use this for local development  
+#load_dotenv(os.path.join(calfire_geospatial_path, '.env'))              # Use this for local development  
 
 
 
 # ------------------------------ GOOGLE EARTH AUTHENTICATION KEYS ------------------------------
 
+# PYTHONANYWHERE DEPLOYMENT
 #API_key_json = os.getenv('GOOGLE_EARTH_API_KEY')  #Use for public deployment
-API_key_json = os.path.join(calfire_geospatial_path, 'Data', 'API_keys', 'google_earth_engine_authentication_key.json') # for local
+
+# LOCAL DEPLOYMENT
+#API_key_json = os.path.join(calfire_geospatial_path, 'Data', 'API_keys', 'google_earth_engine_authentication_key.json') # for local
+#service_account = os.getenv('SERVICE_ACCOUNT')
+
+# RENDER DEPLOYMENT
+API_key_json = os.getenv('GOOGLE_EARTH_API_KEY')  # Use for public deployment with render.com
 service_account = os.getenv('SERVICE_ACCOUNT')
 
 
