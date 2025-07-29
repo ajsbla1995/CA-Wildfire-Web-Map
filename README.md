@@ -5,9 +5,13 @@
 
 - The end goal of this project was to create an interactive web map in Python that allowed the user to be able to select any point on the map and retrieve weather and landcover data for that point. Weather data were collected from the National Weather Service's API Points endpoint, which gives a detailed forecast for latitude, longitude coordinate pair. Landcover data were queried from Google Earth Engine via the Python API. To include interactivity, my Python code has Javascript injected when necessary.
 
-- Satellite Imagery was queried from Google Earth Engine, and specifically uses Sentinel-2 imagery. The temporal resolution of Sentinel-2 images is ~5 days (number of days to orbit the same location), which allows us to track large fires that span weeks. 
-
-- Lastly, to handle all the API requests and data required in this web map, a Flask web framework was used. 
+- Satellite Imagery was queried from Google Earth Engine, and specifically uses Sentinel-2 imagery. The temporal resolution of Sentinel-2 images is ~5 days (number of days to orbit the same location), which allows us to track large fires that span weeks.
+  
+- To handle all the API requests and data required in this web map, a Flask web framework was used.
+  
+- A Python script was used to generate a static html page that includes all of the API requests and Javascript click events. A flask server was then used to render the html and use in the web browser.
+  
+- Finally, a Digital Ocean Droplet server was created to publicly host the webmap and automatically update the static webmap each day at 7:00 AM PST and 3:00 PM PST for the latest wildfire data.
 
 ## Features
 
