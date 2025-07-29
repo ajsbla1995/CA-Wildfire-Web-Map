@@ -348,212 +348,6 @@ def left_join_nifc_calfire_gdfs(nifc_gdf, calfire_df):
 
 # -------------------------- ADD CALFIRE FIRES TO MAP --------------------------
 
-
-def deprecated_add_fires_to_map(fire_df, map):
-   
-    # CSS added to control tooltip sizing
-    tooltip_width_css = """
-    <style>
-        .fire-tooltip {
-            max-width: 300px; /* Set the maximum width of the tooltip */
-            min-width: 200px; 
-            white-space: normal; /* Ensure the text wraps within the tooltip */
-        }
-    </style>
-    """
-     # Add the custom CSS to the map
-    map.get_root().html.add_child(folium.Element(tooltip_width_css))
-
-
-    active_layer = folium.FeatureGroup(name='All Active Fires', control= True, show = True)
-    small_fires_active = folium.FeatureGroup(name='Active Small Fires (<100 acres)', control= True, show = False)
-    medium_fires_active = folium.FeatureGroup(name='Active Medium Fires (100 - 1,000 acres)', control= True, show = False)
-    large_fires_active = folium.FeatureGroup(name = 'Active Large Fires (1,000 - 10,000 acres)', control = True, show = False)
-    mega_fires_active = folium.FeatureGroup(name='Active Mega Fires (10,000+ acres)', control= True, show = False)
-    inactive_layer = folium.FeatureGroup(name='All Contained Fires', control = True, show = False)
-    large_fires_inactive = folium.FeatureGroup(name = ' Contained Large Fires (1000+ acres)', control = True, show = False)
-                                  
-    for index, fire in fire_df.iterrows():
-        lat = fire['Latitude']
-        lon = fire['Longitude']
-        fire_name = fire['Name']
-        start_date_month_day = (datetime
-                      .strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ')
-                      .strftime('%B %d')
-                     )
-        start_date_hour = (datetime
-                      .strptime(fire['Started'], '%Y-%m-%dT%H:%M:%SZ')
-                      .strftime('%H:%M')
-                     )
-        
-        admin_unit = fire['AdminUnit']
-        county = fire['County']
-        acres = fire['AcresBurned']
-        # Check if acres is NaN
-        if pd.isna(acres):
-            acres_burned = 'Not Yet Updated'
-        else:
-            acres_burned = round(acres, 2)
-
-        percent_contained = fire['PercentContained']
-        # Check if percent_contained is NaN
-        if pd.isna(percent_contained):
-            containment_status = 'Not Yet Updated'
-        else:
-            containment_status = f"{percent_contained}% contained"
-    
-
-        # Adds markers for each active fire, if acres > 300, adds markers to 'large_fires_active' Feature Group
-        if (fire['IsActive'] == True):
-            color = 'red'
-            containment = 'still active'
-            folium.Marker([lat, lon], 
-                      #popup=fire_name, 
-                      tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                      icon = folium.Icon(icon = 'fire', 
-                                       color =color, 
-                                       icon_color= 'white')).add_to(active_layer)
-            if fire['AcresBurned'] < 100:
-                color = 'red'
-                containment = 'still active'
-                folium.Marker([lat, lon], 
-                          #popup=fire_name, 
-                          tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                          icon = folium.Icon(icon = 'fire',
-                                        color =color, 
-                                        icon_color= 'white')).add_to(small_fires_active)
-            elif (fire['AcresBurned'] > 100 and fire['AcresBurned']<1000):
-                color = 'red'
-                containment = 'still active'
-                folium.Marker([lat, lon], 
-                          #popup=fire_name, 
-                          tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                          icon = folium.Icon(icon = 'fire',
-                                        color =color, 
-                                        icon_color= 'white')).add_to(medium_fires_active)
-            elif (fire['AcresBurned'] > 1000 and fire['AcresBurned']<10000):
-                color = 'red'
-                containment = 'still active'
-                folium.Marker([lat, lon], 
-                        #popup=fire_name, 
-                        tooltip = f"""
-                        <div class="fire-tooltip">
-                            <strong>{fire_name.upper()}</strong> <br>
-                            Discovered on {start_date_month_day} at {start_date_hour} <br>
-                            <strong>County</strong>: {county} <br>
-                            <strong>Acres</strong>: {acres_burned} <br>
-                            <strong>Status</strong>: {containment_status} <br>
-                            <strong>Administrative Unit</strong>: {admin_unit}
-                        </div>
-                        """,
-                        icon = folium.Icon(icon = 'fire',
-                                        color =color, 
-                                        icon_color= 'white')).add_to(large_fires_active)
-            elif fire['AcresBurned'] > 10000:
-                color = 'red'
-                containment = 'still active'
-                folium.Marker([lat, lon], 
-                          #popup=fire_name, 
-                          tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                          icon = folium.Icon(icon = 'fire',
-                                        color =color, 
-                                        icon_color= 'white')).add_to(mega_fires_active)
-        else:
-                color = 'lightgray'
-                containment = 'not active'
-                folium.Marker([lat, lon], 
-                          #popup=fire_name, 
-                          tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                          icon = folium.Icon(icon = 'fire', 
-                                             color =color, 
-                                             icon_color= 'white')).add_to(inactive_layer)  
-                if  fire['AcresBurned'] > 1000: 
-                    color = 'lightgray' 
-                    containment = 'not active'
-                    folium.Marker([lat, lon], 
-                              #popup=fire_name, 
-                              tooltip = f"""
-                          <div class="fire-tooltip">
-                              <strong>{fire_name.upper()}</strong> <br>
-                              Discovered on {start_date_month_day} at {start_date_hour} <br>
-                              <strong>County</strong>: {county} <br>
-                              <strong>Acres</strong>: {acres_burned} <br>
-                              <strong>Status</strong>: {containment_status} <br>
-                              <strong>Administrative Unit</strong>: {admin_unit}
-                          </div>
-                          """,
-                              icon = folium.Icon(icon = 'fire', 
-                                                 color =color, 
-                                                 icon_color= 'white')).add_to(large_fires_inactive) 
-            
-    active_layer.add_to(map)
-    small_fires_active.add_to(map)
-    medium_fires_active.add_to(map)
-    large_fires_active.add_to(map)
-    mega_fires_active.add_to(map)
-    inactive_layer.add_to(map)
-    large_fires_inactive.add_to(map)
-
-    current_date = datetime.now().strftime('%m-%d-%Y')
-    
-    grouped_layer_control = GroupedLayerControl(
-                                            groups={
-                                                f'<b>CURRENTLY ACTIVE FIRES AS OF {current_date}</b>': [active_layer, small_fires_active, medium_fires_active, large_fires_active, mega_fires_active], 
-                                                '<br>INACTIVE FIRES</br>': [inactive_layer, large_fires_inactive]
-                                            },
-                                            collapsed=False,
-                                            exclusive_groups= False,
-                                            position = 'bottomleft'
-                                            ).add_to(map)
- 
-    
-    return map
-    
 def add_fires_and_perimeters_to_map(fire_df, m):
    
     """
@@ -2033,7 +1827,7 @@ def deprecated_get_current_weather_conditions(lat, lon):
 
     return f"({date_converted}): {forecast} The relative humidity is {humidity}%"
 
-async def get_current_weather_conditions(lat, lon):
+async def dep_get_current_weather_conditions(lat, lon):
     '''
     Asynchronously makes an API call to NOAA for the current weather forecast.
     Data returned as JSON with structure data['properties']['periods'][0]...
@@ -2087,6 +1881,56 @@ async def get_current_weather_conditions(lat, lon):
                 humidity = gridpoint_data['properties']['relativeHumidity']['values'][0]['value']
             except KeyError as e:
                 humidity = 'currently not able to be retrieved.'
+
+    return f"({date_converted}): {forecast} The relative humidity is {humidity}%"
+
+
+
+
+def get_current_weather_conditions(lat, lon):
+    '''
+    Synchronously makes an API call to NOAA for the current weather forecast.
+    '''
+    endpoint = f'https://api.weather.gov/points/{lat},{lon}'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'
+    }
+
+    try:
+        # Step 1: Get forecast and gridpoint URLs
+        response = requests.get(endpoint, headers=headers)
+        if response.status_code != 200:
+            return f"Error: Unable to retrieve forecast. Status code {response.status_code}"
+
+        data = response.json()
+        forecast_url = data['properties']['forecast']
+        gridpoint_url = data['properties']['forecastGridData']
+
+        # Step 2: Get current forecast
+        response = requests.get(forecast_url, headers=headers)
+        if response.status_code != 200:
+            return f"Current weather data for location is unavailable ({response.status_code})"
+        
+        data = response.json()
+        period = data['properties']['periods'][0]
+        temperature = period['temperature']
+        temperature_unit = period['temperatureUnit']
+        wind_speed = period['windSpeed']
+        wind_direction = period['windDirection']
+        forecast = period['detailedForecast']
+        day_of_week = period['name']
+        date = period['startTime']
+        date_converted = datetime.fromisoformat(date[:-6]).strftime('%m/%d/%y')
+
+        # Step 3: Get relative humidity
+        response = requests.get(gridpoint_url, headers=headers)
+        if response.status_code != 200:
+            humidity = 'N/A'
+        else:
+            gridpoint_data = response.json()
+            humidity = gridpoint_data['properties']['relativeHumidity']['values'][0]['value']
+    except Exception as e:
+        return f"Failed to recover weather data: {e}"
 
     return f"({date_converted}): {forecast} The relative humidity is {humidity}%"
 
@@ -2363,7 +2207,90 @@ def add_map_information_button(map):
     map.get_root().html.add_child(references_control)
     return map
 
-def enable_info_button_interactivity():
+def add_map_info_button_with_interactivity(map, map_name):
+    """
+    Adds a collapsible map information button and its interactivity to the map.
+    """
+    map_info_html = f"""
+    <style>
+    .collapsible {{
+        background-color: #777;
+        color: white;
+        cursor: pointer;
+        padding: 10px;
+        width: 235px;
+        border: none;
+        text-align: left;
+        outline: none;
+        font-size: 15px;
+        position: fixed; 
+        bottom: 35.5%; 
+        left: 1%;
+        z-index:9999;
+    }}
+    .active, .collapsible:hover {{
+        background-color: #555;
+    }}
+    .content {{
+        padding: 0 18px;
+        display: none;
+        overflow: hidden;
+        background-color: #f1f1f1;
+        border: 2px solid grey;
+        width: 300px;
+        position: fixed; 
+        bottom: 1.3%; 
+        left: 19%;
+        font-size: 10px;
+        z-index:9999;
+        max-height: 313px;
+        overflow-y: auto;
+    }}
+    </style>
+
+    <button class="collapsible">Map Information & Data Sources</button>
+    <div class="content">
+        <h4>Map Information</h4>
+        <p><b>ABOUT THIS MAP</b><br>This map aims to provide the user more context for current wildfire potential, activity, and containment within areas in California where CAL Fire is the primary emergency response agency.</p>
+        <p><b>ABOUT THE DATA</b><br>
+        <b>Fire Data :</b> Fire data is extracted from both Calfire and National Interagency Fire Center (NIFC)...</p>
+        <p><b>HOW TO USE THE MAP</b><br>Click anywhere on the map to get information on landcover class type, along with the weather forecast for the current date, within a 5 mile radius.</p>
+        <h4>Data Sources</h4>
+        <ul>
+            <li><a href="https://www.weather.gov/" target="_blank">NOAA Weather Service</a></li>
+            <li><a href="https://earthengine.google.com/" target="_blank">Google Earth Engine</a></li>
+            <li><a href="https://www.calfire.ca.gov/" target="_blank">CAL FIRE</a></li>
+            <li><a href="https://apps.usfa.fema.gov/registry/" target="_blank">US Fire Administration</a></li>
+            <li><a href="https://www.nifc.gov/" target="_blank">National Interagency Fire Center</a></li>
+        </ul>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {{
+        const collapsibleInterval = setInterval(() => {{
+            if (window.{map_name}) {{
+                clearInterval(collapsibleInterval);
+                var coll = document.getElementsByClassName("collapsible");
+                for (var i = 0; i < coll.length; i++) {{
+                    coll[i].addEventListener("click", function() {{
+                        this.classList.toggle("active");
+                        var content = this.nextElementSibling;
+                        if (content.style.display === "block") {{
+                            content.style.display = "none";
+                        }} else {{
+                            content.style.display = "block";
+                        }}
+                    }});
+                }}
+            }}
+        }}, 100);
+    }});
+    </script>
+    """
+    map.get_root().html.add_child(Element(map_info_html))
+    return map_info_html  # Return it for later HTML injection too
+
+def dep_enable_info_button_interactivity():
     """
     Returns javascript code to enable show/hide interactivity
     """
@@ -2386,7 +2313,30 @@ def enable_info_button_interactivity():
     });
     </script>
     """
-
+def enable_info_button_interactivity(map_name="map"):
+    return f"""
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {{
+        const collapsibleInterval = setInterval(() => {{
+            if (window.{map_name}) {{
+                clearInterval(collapsibleInterval);
+                var coll = document.getElementsByClassName("collapsible");
+                for (var i = 0; i < coll.length; i++) {{
+                    coll[i].addEventListener("click", function() {{
+                        this.classList.toggle("active");
+                        var content = this.nextElementSibling;
+                        if (content.style.display === "block") {{
+                            content.style.display = "none";
+                        }} else {{
+                            content.style.display = "block";
+                        }}
+                    }});
+                }}
+            }}
+        }}, 100);
+    }});
+    </script>
+    """
 
 
 # Landcover 

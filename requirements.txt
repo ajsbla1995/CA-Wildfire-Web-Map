@@ -2,7 +2,7 @@ aiohttp==3.9.5
 beautifulsoup4==4.13.3
 branca==0.7.2
 contextily==1.5.0
-earthengine_api==0.1.400
+earthengine_api==0.1.410
 ee==0.2
 flask[async]==3.1.0
 Flask_Caching==2.3.0
@@ -23,7 +23,9 @@ osmnx==2.0.1
 pandas==2.2.3
 PyCRS==1.0.2
 python-dotenv==1.0.1
+quart==0.20.0
 Requests==2.32.3
 Shapely==2.0.7
-setuptools
+uvicorn
 gunicorn
+setuptools
