@@ -1,5 +1,5 @@
 # CA Wildfire Tracker 
--- > https://cawildfire.dev/
+-- > View the full screen wildfire webmap at https://cawildfire.dev/
 
 
 
