@@ -24,6 +24,7 @@
 - **Fire Stations**: Marks the locations of fire stations across California.
 - **Interactive Map**: Users can click on the map to get specific data about the selected area.
 - **Customizable Layers**: Includes multiple layers as Sentinel-2 images, NDVI, and land cover types to show how fires spread and the recovery of areas affected by fires.
+- **Fire Statistics for the Current Year**: Uses National Interagency Fire Center data to calculate the total # of burned acres and estimated damages for the current fire year.
 
 ## Installation
 
